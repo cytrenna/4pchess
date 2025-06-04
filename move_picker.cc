@@ -45,11 +45,11 @@ MovePicker::MovePicker(
 
     int score = piece_move_order_scores[piece.GetPieceType()];
     if (pvmove.has_value() && move == *pvmove) {
-      stages_[PV_MOVE].emplace_back(i, score);
+      stages_[PV_MOVE].emplace_back(static_cast<short>(i), static_cast<float>(score));
     } else if (killers != nullptr
                && (killers[0] == move || killers[1] == move)
                && include_quiets) {
-      stages_[KILLER].emplace_back(i, score + (move == killers[0] ? 1 : 0));
+      stages_[KILLER].emplace_back(static_cast<short>(i), static_cast<float>(score + (move == killers[0] ? 1 : 0)));
     } else if (move.IsCapture()) {
       int captured_val = piece_evaluations[capture.GetPieceType()];
       int attacker_val = piece_evaluations[piece.GetPieceType()];
@@ -60,9 +60,9 @@ MovePicker::MovePicker(
         [to.GetRow()][to.GetCol()];
       score += history_score;
       if (attacker_val <= captured_val) {
-        stages_[GOOD_CAPTURE].emplace_back(i, score);
+        stages_[GOOD_CAPTURE].emplace_back(static_cast<short>(i), static_cast<float>(score));
       } else {
-        stages_[BAD_CAPTURE].emplace_back(i, score);
+        stages_[BAD_CAPTURE].emplace_back(static_cast<short>(i), static_cast<float>(score));
       }
     } else if (include_quiets) {
       score += history_heuristic[piece.GetPieceType()][from.GetRow()][from.GetCol()][to.GetRow()][to.GetCol()] / 2;
@@ -76,7 +76,7 @@ MovePicker::MovePicker(
       score += (*piece_to_history[3])[piece_type][to.GetRow()][to.GetCol()] / 4;
       score += (*piece_to_history[4])[piece_type][to.GetRow()][to.GetCol()] / 4;
 
-      stages_[QUIET].emplace_back(i, score);
+      stages_[QUIET].emplace_back(static_cast<short>(i), static_cast<float>(score));
     }
   }
 
@@ -99,7 +99,7 @@ Move* MovePicker::GetNextMove() {
       if (enable_move_order_checks_) {
         for (auto& item : stage_vec) {
           if (moves_[item.index].DeliversCheck(*board_)) {
-            item.score += stage_ == QUIET ? 100'000 : 10'00;
+            item.score += (stage_ == QUIET ? 100'000.0f : 1000.0f);
           }
         }
       }

@@ -216,14 +216,15 @@ class AlphaBetaPlayer {
   void EnableDebug(bool enable) { enable_debug_ = enable; }
 
   // for debugging
-  int64_t test1_ = 0;
-  int64_t test2_ = 0;
-  int64_t test3_ = 0;
+  std::atomic<int64_t> test1_ = 0;
+  std::atomic<int64_t> test2_ = 0;
+  std::atomic<int64_t> test3_ = 0;
 
  private:
 
   std::optional<std::tuple<int, std::optional<Move>, int>>
     MakeMoveSingleThread(
+      size_t thread_id,
       ThreadState& state,
       std::optional<std::chrono::time_point<std::chrono::system_clock>> deadline,
       int max_depth = 20);
@@ -238,23 +239,23 @@ class AlphaBetaPlayer {
   bool HasShield(Board& board, PlayerColor color, const BoardLocation& king_loc);
   bool OnBackRank(const BoardLocation& king_loc);
 
-  int64_t num_nodes_ = 0; // debugging
-  int64_t num_cache_hits_ = 0;
-  int64_t num_null_moves_tried_ = 0;
-  int64_t num_null_moves_pruned_ = 0;
-  int64_t num_futility_moves_pruned_ = 0;
-  int64_t num_lmr_searches_ = 0;
-  int64_t num_lmr_researches_ = 0;
-  int64_t num_singular_extension_searches_ = 0;
-  int64_t num_singular_extensions_ = 0;
-  int64_t num_lm_pruned_ = 0;
-  int64_t num_fail_high_reductions_ = 0;
-  int64_t num_check_extensions_ = 0;
-  int64_t num_lazy_eval_ = 0;
-  int64_t num_razor_ = 0;
-  int64_t num_razor_tested_ = 0;
+  std::atomic<int64_t> num_nodes_ = 0; // debugging
+  std::atomic<int64_t> num_cache_hits_ = 0;
+  std::atomic<int64_t> num_null_moves_tried_ = 0;
+  std::atomic<int64_t> num_null_moves_pruned_ = 0;
+  std::atomic<int64_t> num_futility_moves_pruned_ = 0;
+  std::atomic<int64_t> num_lmr_searches_ = 0;
+  std::atomic<int64_t> num_lmr_researches_ = 0;
+  std::atomic<int64_t> num_singular_extension_searches_ = 0;
+  std::atomic<int64_t> num_singular_extensions_ = 0;
+  std::atomic<int64_t> num_lm_pruned_ = 0;
+  std::atomic<int64_t> num_fail_high_reductions_ = 0;
+  std::atomic<int64_t> num_check_extensions_ = 0;
+  std::atomic<int64_t> num_lazy_eval_ = 0;
+  std::atomic<int64_t> num_razor_ = 0;
+  std::atomic<int64_t> num_razor_tested_ = 0;
 
-  bool canceled_ = false;
+  std::atomic<bool> canceled_ = false;
   int piece_move_order_scores_[6];
   PlayerOptions options_;
   int location_evaluations_[14][14];

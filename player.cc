@@ -11,6 +11,7 @@
 #include <cstring>
 #include <thread>
 #include <mutex>
+#include <atomic>
 
 #include "board.h"
 #include "player.h"
@@ -257,11 +258,17 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
                 || (tte->bound == UPPER_BOUND && tte->score <= alpha))
              ) {
 
+            if (tte->move.Present()) {
+                return std::make_tuple(
+                    std::min(beta, std::max(alpha, tte->score)), tte->move);
+            }
             return std::make_tuple(
-                std::min(beta, std::max(alpha, tte->score)), tte->move);
+                std::min(beta, std::max(alpha, tte->score)), std::nullopt);
           }
         }
-        tt_move = tte->move;
+        if (tte->move.Present()) {
+          tt_move = tte->move;
+        }
         is_tt_pv = tte->is_pv;
       }
     }
@@ -717,12 +724,19 @@ AlphaBetaPlayer::QSearch(
                 || (tte->bound == LOWER_BOUND && tte->score >= beta)
                 || (tte->bound == UPPER_BOUND && tte->score <= alpha))
              ) {
-
+            
+            if (tte->move.Present()) {
+                return std::make_tuple(
+                    std::min(beta, std::max(alpha, tte->score)), tte->move);
+            }
             return std::make_tuple(
                 std::min(beta, std::max(alpha, tte->score)), std::nullopt);
+
           }
         }
-        tt_move = tte->move;
+        if (tte->move.Present()) {
+          tt_move = tte->move;
+        }
       }
     }
 
@@ -1463,27 +1477,24 @@ AlphaBetaPlayer::MakeMove(
     thread_state.ResetHistoryHeuristic();
   }
 
-  std::mutex mutex;
-  std::optional<std::tuple<int, std::optional<Move>, int>> res;
-
   std::vector<std::unique_ptr<std::thread>> threads;
-  for (size_t i = 0; i < thread_states.size(); i++) {
+  for (size_t i = 1; i < num_threads; i++) {
     threads.push_back(std::make_unique<std::thread>([
-      i, &thread_states, deadline, max_depth, this, &res, &mutex] {
-      ThreadState& thread_state = thread_states[i];
-      auto r = MakeMoveSingleThread(thread_state, deadline,
+      this, i, &thread_states, deadline, max_depth] {
+      MakeMoveSingleThread(i, thread_states[i], deadline,
           max_depth);
-      SetCanceled(true);
-      std::lock_guard<std::mutex> lock(mutex);
-      if (!res.has_value()) {
-        res = r;
-        pv_info_ = thread_state.GetPVInfo();
-      }
     }));
   }
 
+  auto res = MakeMoveSingleThread(0, thread_states[0], deadline, max_depth);
+
+  SetCanceled(true);
   for (auto& thread : threads) {
     thread->join();
+  }
+
+  if (res.has_value()) {
+      pv_info_ = thread_states[0].GetPVInfo();
   }
 
   SetCanceled(false);
@@ -1492,6 +1503,7 @@ AlphaBetaPlayer::MakeMove(
 
 std::optional<std::tuple<int, std::optional<Move>, int>>
 AlphaBetaPlayer::MakeMoveSingleThread(
+    size_t thread_id,
     ThreadState& thread_state,
     std::optional<std::chrono::time_point<std::chrono::system_clock>> deadline,
     int max_depth) {
@@ -1515,54 +1527,61 @@ AlphaBetaPlayer::MakeMoveSingleThread(
     while (next_depth <= max_depth) {
       std::optional<std::tuple<int, std::optional<Move>>> move_and_value;
 
-      int prev = average_root_eval_;
-      int delta = 50;
-      if (asp_nobs_ > 0) {
-        delta = 50 + std::sqrt((asp_sum_sq_ - asp_sum_*asp_sum_/asp_nobs_)/asp_nobs_);
-      }
+      if (thread_id == 0) {
+          int prev = average_root_eval_;
+          int delta = 50;
+          if (asp_nobs_ > 0) {
+            delta = 50 + std::sqrt((asp_sum_sq_ - asp_sum_*asp_sum_/asp_nobs_)/asp_nobs_);
+          }
 
-      alpha = std::max(prev - delta, -kMateValue);
-      beta = std::min(prev + delta, kMateValue);
-      int fail_cnt = 0;
+          alpha = std::max(prev - delta, -kMateValue);
+          beta = std::min(prev + delta, kMateValue);
+          int fail_cnt = 0;
 
-      while (true) {
-        move_and_value = Search(
-            ss, Root, thread_state, 1, next_depth, alpha, beta, maximizing_player,
+          while (true) {
+            move_and_value = Search(
+                ss, Root, thread_state, 1, next_depth, alpha, beta, maximizing_player,
+                0, deadline, pv_info);
+            if (!move_and_value.has_value()) { // Hit deadline
+              break;
+            }
+            int evaluation = std::get<0>(*move_and_value);
+            if (asp_nobs_ == 0) {
+              average_root_eval_ = evaluation;
+            } else {
+              average_root_eval_ = (2 * evaluation + average_root_eval_) / 3;
+            }
+            asp_nobs_++;
+            asp_sum_ += evaluation;
+            asp_sum_sq_ += evaluation * evaluation;
+
+            if (std::abs(evaluation) == kMateValue) {
+              break;
+            }
+
+            if (evaluation <= alpha) {
+              beta = (alpha + beta) / 2;
+              alpha = std::max(evaluation - delta, -kMateValue);
+              ++fail_cnt;
+            } else if (evaluation >= beta) {
+              beta = std::min(evaluation + delta, kMateValue);
+              ++fail_cnt;
+            } else {
+              break;
+            }
+
+            if (fail_cnt >= 5) {
+              alpha = -kMateValue;
+              beta = kMateValue;
+            }
+
+            delta += delta / 3;
+          }
+      } else {
+          // Helper threads use a full window
+          move_and_value = Search(
+            ss, Root, thread_state, 1, next_depth, -kMateValue, kMateValue, maximizing_player,
             0, deadline, pv_info);
-        if (!move_and_value.has_value()) { // Hit deadline
-          break;
-        }
-        int evaluation = std::get<0>(*move_and_value);
-        if (asp_nobs_ == 0) {
-          average_root_eval_ = evaluation;
-        } else {
-          average_root_eval_ = (2 * evaluation + average_root_eval_) / 3;
-        }
-        asp_nobs_++;
-        asp_sum_ += evaluation;
-        asp_sum_sq_ += evaluation * evaluation;
-
-        if (std::abs(evaluation) == kMateValue) {
-          break;
-        }
-
-        if (evaluation <= alpha) {
-          beta = (alpha + beta) / 2;
-          alpha = std::max(evaluation - delta, -kMateValue);
-          ++fail_cnt;
-        } else if (evaluation >= beta) {
-          beta = std::min(evaluation + delta, kMateValue);
-          ++fail_cnt;
-        } else {
-          break;
-        }
-
-        if (fail_cnt >= 5) {
-          alpha = -kMateValue;
-          beta = kMateValue;
-        }
-
-        delta += delta / 3;
       }
 
       if (!move_and_value.has_value()) { // Hit deadline

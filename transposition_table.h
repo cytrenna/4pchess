@@ -3,6 +3,8 @@
 
 #include <atomic>
 #include <cstdint>
+#include <memory>
+#include <mutex>
 #include <optional>
 
 #include "board.h"
@@ -16,7 +18,7 @@ enum ScoreBound {
 struct HashTableEntry {
   int64_t key;
   int depth;
-  std::optional<Move> move;
+  Move move;
   int score;
   ScoreBound bound;
   bool is_pv;
@@ -39,6 +41,8 @@ class TranspositionTable {
  private:
   HashTableEntry* hash_table_ = nullptr;
   size_t table_size_ = 0;
+  static constexpr size_t kNumMutexes = 256;
+  std::unique_ptr<std::mutex[]> a_mutexes_;
 };
 
 

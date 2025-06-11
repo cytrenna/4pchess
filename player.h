@@ -9,6 +9,7 @@
 #include <unordered_map>
 #include <utility>
 #include <vector>
+#include <mutex>
 
 #include "board.h"
 #include "move_picker.h"
@@ -108,25 +109,13 @@ class ThreadState {
  public:
   ThreadState(
       PlayerOptions options, const Board& board, const PVInfo& pv_info);
+  ~ThreadState();
   Board& GetBoard() { return board_; }
   Move* GetNextMoveBufferPartition();
   void ReleaseMoveBufferPartition();
   int* NActivated() { return n_activated_; }
   int* TotalMoves() { return total_moves_; }
   PVInfo& GetPVInfo() { return pv_info_; }
-  void ResetHistoryHeuristic();
-
-  ~ThreadState();
-
-  // (piece_type, from_row, from_col, to_row, to_col)
-  int history_heuristic[6][14][14][14][14];
-  // (piece_type, piece_color, capture_piece_type, capture_piece_color, to_row, to_col)
-  int capture_heuristic[6][4][6][4][14][14];
-  // https://www.chessprogramming.org/Countermove_Heuristic
-  // (from_row, from_col, to_row, to_col)
-  Move* counter_moves = nullptr;
-  // indexed by (in_check, is_capture)
-  ContinuationHistory** continuation_history = nullptr;
 
   int n_threats[4] = {0, 0, 0, 0};
 
@@ -150,6 +139,7 @@ class AlphaBetaPlayer {
  public:
   AlphaBetaPlayer(
       std::optional<PlayerOptions> options = std::nullopt);
+  ~AlphaBetaPlayer();
 
   std::optional<std::tuple<int, std::optional<Move>, int>> MakeMove(
       Board& board,
@@ -230,6 +220,7 @@ class AlphaBetaPlayer {
       int max_depth = 20);
 
   void ResetMobilityScores(ThreadState& thread_state);
+  void ResetHistoryHeuristics();
   void UpdateStats(Stack* ss, ThreadState& thread_state, const Board& board,
                    const Move& move, int depth, bool fail_high,
                    const std::vector<Move>& searched_moves);
@@ -260,7 +251,6 @@ class AlphaBetaPlayer {
   PlayerOptions options_;
   int location_evaluations_[14][14];
 
-  //HashTableEntry* hash_table_ = nullptr;
   std::unique_ptr<TranspositionTable> transposition_table_;
   PVInfo pv_info_;
 
@@ -281,6 +271,20 @@ class AlphaBetaPlayer {
   int piece_activation_threshold_[7];
   bool knight_to_king_[14][14][14][14];
   Team root_team_ = NO_TEAM;
+
+  // Heuristics (shared across threads)
+  // (piece_type, from_row, from_col, to_row, to_col)
+  int history_heuristic[6][14][14][14][14];
+  // (piece_type, piece_color, capture_piece_type, capture_piece_color, to_row, to_col)
+  int capture_heuristic[6][4][6][4][14][14];
+  // https://www.chessprogramming.org/Countermove_Heuristic
+  // (from_row, from_col, to_row, to_col)
+  Move* counter_moves = nullptr;
+  // indexed by (in_check, is_capture)
+  ContinuationHistory** continuation_history = nullptr;
+
+  static constexpr size_t kHeuristicMutexes = 256;
+  std::unique_ptr<std::mutex[]> heuristic_mutexes_;
 };
 
 }  // namespace chess

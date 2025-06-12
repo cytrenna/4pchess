@@ -16,6 +16,7 @@
 #include "board.h"
 #include "player.h"
 #include "move_picker.h"
+#include "transposition_table.h"
 //#include "static_exchange.h"
 
 namespace chess {
@@ -247,12 +248,14 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
 
   std::optional<Move> tt_move;
   const HashTableEntry* tte = nullptr;
+  bool tt_hit = false;
   if (options_.enable_transposition_table) {
     int64_t key = board.HashKey();
 
     tte = transposition_table_->Get(key);
     if (tte != nullptr) {
       if (tte->key == key) { // valid entry
+        tt_hit = true;
         if (tte->depth >= depth) {
           num_cache_hits_++;
           // at non-PV nodes check for an early TT cutoff
@@ -289,15 +292,15 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
 
     int eval = Evaluate(thread_state, maximizing_player, alpha, beta);
     if (options_.enable_transposition_table) {
-      transposition_table_->Save(board.HashKey(), 0, std::nullopt, eval, EXACT, is_pv_node);
+      transposition_table_->Save(board.HashKey(), 0, std::nullopt, eval, eval, EXACT, is_pv_node);
     }
 
     return std::make_tuple(eval, std::nullopt);
   }
 
-  int eval = 0;
-  if (tt_move.has_value()) {
-    eval = tte->score;
+  int eval;
+  if (tt_hit && tte->eval != value_none_tt) {
+    eval = tte->eval;
   } else {
     eval = Evaluate(thread_state, maximizing_player, alpha, beta);
   }
@@ -669,7 +672,7 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
   if (options_.enable_transposition_table) {
     ScoreBound bound = beta <= alpha ? LOWER_BOUND : is_pv_node &&
       best_move.has_value() ? EXACT : UPPER_BOUND;
-    transposition_table_->Save(board.HashKey(), depth, best_move, score, bound, is_pv_node);
+    transposition_table_->Save(board.HashKey(), depth, best_move, score, ss->static_eval, bound, is_pv_node);
   }
 
   if (best_move.has_value()
@@ -713,6 +716,7 @@ AlphaBetaPlayer::QSearch(
   int tt_depth = 0;
 
   std::optional<Move> tt_move;
+  bool tt_hit = false;
 
   const HashTableEntry* tte = nullptr;
   if (options_.enable_transposition_table) {
@@ -721,6 +725,7 @@ AlphaBetaPlayer::QSearch(
     tte = transposition_table_->Get(key);
     if (tte != nullptr) {
       if (tte->key == key) { // valid entry
+        tt_hit = true;
         if (tte->depth >= tt_depth) {
           num_cache_hits_++;
           // at non-PV nodes check for an early TT cutoff
@@ -754,21 +759,23 @@ AlphaBetaPlayer::QSearch(
   //bool partner_checked = board.IsKingInCheck(GetPartner(player));
 
   // initialize score
-  int best_value = -kMateValue;
+  int best_value;
   int futility_base = -kMateValue;
+  int static_eval_q = value_none_tt;
   if (in_check) {
     best_value = -kMateValue;
   } else {
     // stand pat
-    if (tt_move.has_value()) {
-      best_value = tte->score;
+    if (tt_hit && tte->eval != value_none_tt) {
+      best_value = tte->eval;
     } else {
       best_value = Evaluate(thread_state, maximizing_player, alpha, beta);
     }
+    static_eval_q = best_value;
     if (best_value >= beta) {
       if (options_.enable_transposition_table) {
         transposition_table_->Save(
-            board.HashKey(), 0, std::nullopt, best_value, LOWER_BOUND, is_pv_node);
+            board.HashKey(), 0, std::nullopt, best_value, static_eval_q, LOWER_BOUND, is_pv_node);
       }
 
       return std::make_tuple(best_value, std::nullopt);
@@ -957,7 +964,7 @@ AlphaBetaPlayer::QSearch(
   if (options_.enable_transposition_table) {
     ScoreBound bound = fail_high ? LOWER_BOUND : (fail_low && is_pv_node ? EXACT : UPPER_BOUND);
     transposition_table_->Save(board.HashKey(), tt_depth, best_move, score,
-        bound, is_pv_node);
+        static_eval_q, bound, is_pv_node);
   }
 
   thread_state.ReleaseMoveBufferPartition();

@@ -11,6 +11,8 @@
 
 namespace chess {
 
+constexpr int value_none_tt = -119988;
+
 enum ScoreBound {
   EXACT = 0, LOWER_BOUND = 1, UPPER_BOUND = 2,
 };
@@ -20,6 +22,7 @@ struct HashTableEntry {
   int depth;
   Move move;
   int score;
+  int eval;
   ScoreBound bound;
   bool is_pv;
 };
@@ -30,7 +33,7 @@ class TranspositionTable {
 
    const HashTableEntry* Get(int64_t key);
    void Save(int64_t key, int depth, std::optional<Move> move,
-             int score, ScoreBound bound, bool is_pv);
+             int score, int eval, ScoreBound bound, bool is_pv);
 
   ~TranspositionTable() {
     if (hash_table_ != nullptr) {

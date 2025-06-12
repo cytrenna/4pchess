@@ -23,7 +23,7 @@ nohup*
 api_key*.txt
 __pycache__*
 
-.vs
+.vs*
 d2
 d3
 d4
@@ -34,3 +34,4 @@ nnue
 cli
 MODULE.bazel*
 
+code*

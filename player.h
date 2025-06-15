@@ -221,6 +221,7 @@ class AlphaBetaPlayer {
 
   void ResetMobilityScores(ThreadState& thread_state);
   void ResetHistoryHeuristics();
+  void AgeHistoryHeuristics();
   void UpdateStats(Stack* ss, ThreadState& thread_state, const Board& board,
                    const Move& move, int depth, bool fail_high,
                    const std::vector<Move>& searched_moves);

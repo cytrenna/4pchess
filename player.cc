@@ -1441,6 +1441,70 @@ void AlphaBetaPlayer::ResetHistoryHeuristics() {
   }
 }
 
+void AlphaBetaPlayer::AgeHistoryHeuristics() {
+  // Age quiet move history heuristic by dividing all scores by 2
+  for (int pt = 0; pt < 6; ++pt) {
+    for (int r1 = 0; r1 < 14; ++r1) {
+      for (int c1 = 0; c1 < 14; ++c1) {
+        for (int r2 = 0; r2 < 14; ++r2) {
+          for (int c2 = 0; c2 < 14; ++c2) {
+            history_heuristic[pt][r1][c1][r2][c2] >>= 1;
+          }
+        }
+      }
+    }
+  }
+
+  // Age capture move history heuristic by dividing all scores by 2
+  for (int pt1 = 0; pt1 < 6; ++pt1) {
+    for (int c1 = 0; c1 < 4; ++c1) {
+      for (int pt2 = 0; pt2 < 6; ++pt2) {
+        for (int c2 = 0; c2 < 4; ++c2) {
+          for (int r = 0; r < 14; ++r) {
+            for (int col = 0; col < 14; ++col) {
+              capture_heuristic[pt1][c1][pt2][c2][r][col] >>= 1;
+            }
+          }
+        }
+      }
+    }
+  }
+
+  // Countermoves are not aged, they are cleared to prevent using
+  // a move from a completely different position.
+  std::memset(counter_moves, 0, sizeof(Move) * 14 * 14 * 14 * 14);
+
+  // // Age continuation histories
+  // for (bool in_check : {false, true}) {
+  //   for (StatsType c : {NoCaptures, Captures}) {
+  //     for (auto& piece_type_hist : continuation_history[in_check][c]) {
+  //       for (auto& from_hist : piece_type_hist) {
+  //         for (auto& to_hist : from_hist) {
+  //           // Assuming `h` is a pointer to a container of ints (like std::array)
+  //           for (auto& h : to_hist) {
+  //               // The original code uses h->fill(0). We iterate and divide.
+  //               for (int i = 0; i < h->size(); ++i) {
+  //                   (*h)[i] >>= 1;
+  //               }
+  //           }
+  //         }
+  //       }
+  //     }
+  //   }
+  // }
+  for (bool in_check : {false, true}) {
+    for (StatsType c : {NoCaptures, Captures}) {
+      for (auto& to_row : continuation_history[in_check][c]) {
+        for (auto& to_col : to_row) {
+          for (auto& h : to_col) {
+            h->fill(0);
+          }
+        }
+      }
+    }
+  }
+}
+
 void AlphaBetaPlayer::ResetMobilityScores(ThreadState& thread_state) {
   // reset pseudo-mobility scores
   if (options_.enable_mobility_evaluation || options_.enable_piece_activation) {
@@ -1485,7 +1549,8 @@ AlphaBetaPlayer::MakeMove(
     max_depth = std::min(max_depth, *options_.max_search_depth);
   }
 
-  ResetHistoryHeuristics();
+  // ResetHistoryHeuristics();
+  AgeHistoryHeuristics();
 
   int num_threads = 1;
   if (options_.enable_multithreading) {

@@ -1474,30 +1474,27 @@ void AlphaBetaPlayer::AgeHistoryHeuristics() {
   // a move from a completely different position.
   std::memset(counter_moves, 0, sizeof(Move) * 14 * 14 * 14 * 14);
 
-  // // Age continuation histories
-  // for (bool in_check : {false, true}) {
-  //   for (StatsType c : {NoCaptures, Captures}) {
-  //     for (auto& piece_type_hist : continuation_history[in_check][c]) {
-  //       for (auto& from_hist : piece_type_hist) {
-  //         for (auto& to_hist : from_hist) {
-  //           // Assuming `h` is a pointer to a container of ints (like std::array)
-  //           for (auto& h : to_hist) {
-  //               // The original code uses h->fill(0). We iterate and divide.
-  //               for (int i = 0; i < h->size(); ++i) {
-  //                   (*h)[i] >>= 1;
-  //               }
-  //           }
-  //         }
-  //       }
-  //     }
-  //   }
-  // }
-  for (bool in_check : {false, true}) {
-    for (StatsType c : {NoCaptures, Captures}) {
-      for (auto& to_row : continuation_history[in_check][c]) {
-        for (auto& to_col : to_row) {
-          for (auto& h : to_col) {
-            h->fill(0);
+  // Age continuation histories by iterating down to the final integer tables.
+  for (int in_check = 0; in_check < 2; ++in_check) {
+    for (int is_capture = 0; is_capture < 2; ++is_capture) {
+      auto& cont_hist_table = continuation_history[in_check][is_capture];
+
+      for (auto& piece_hist : cont_hist_table) { // Iterates over piece_type (7 elements)
+        for (auto& to_row_hist : piece_hist) { // Iterates over to_row (14 elements)
+          for (auto& to_col_hist : to_row_hist) { // Iterates over to_col (14 elements)
+            // The to_col_hist here is a StatsEntry<PieceToHistory, NOT_USED>
+            PieceToHistory* h = &to_col_hist; // Get the pointer to the underlying PieceToHistory object
+
+            // Age the PieceToHistory table this pointer points to.
+            if (h != nullptr) {
+                using entry_t = StatsEntry<int32_t, 2147483647>;
+                entry_t* p_start = reinterpret_cast<entry_t*>(h); // Reinterpret as a flat array of StatsEntry<int32_t, ...>
+                constexpr size_t num_entries = sizeof(PieceToHistory) / sizeof(entry_t); // Calculate how many int32_t values are in PieceToHistory
+
+                for (size_t i = 0; i < num_entries; ++i) {
+                    p_start[i] = static_cast<int32_t>(p_start[i]) >> 1; // Divide by 2
+                }
+            }
           }
         }
       }

@@ -110,18 +110,18 @@ class ThreadState {
   ThreadState(
       PlayerOptions options, const Board& board, const PVInfo& pv_info);
   ~ThreadState();
-  Board& GetBoard() { return board_; }
   Move* GetNextMoveBufferPartition();
   void ReleaseMoveBufferPartition();
   int* NActivated() { return n_activated_; }
   int* TotalMoves() { return total_moves_; }
   PVInfo& GetPVInfo() { return pv_info_; }
+  const Board& GetRootBoard() { return root_board_; }
 
   int n_threats[4] = {0, 0, 0, 0};
 
  private:
   PlayerOptions options_;
-  Board board_;
+  const Board& root_board_;
   PVInfo pv_info_;
 
   // Buffer used to store moves per node.
@@ -147,7 +147,7 @@ class AlphaBetaPlayer {
       int max_depth = 20);
   int StaticEvaluation(Board& board);
   // Eval with respect to the maximizing player
-  int Evaluate(ThreadState& thread_state, bool maximizing_player,
+  int Evaluate(ThreadState& thread_state, Board& board, bool maximizing_player,
       int alpha = -kMateValue, int beta = kMateValue);
   void CancelEvaluation() { canceled_ = true; }
   // NOTE: Should wait until evaluation is done before resetting this to true.
@@ -159,6 +159,7 @@ class AlphaBetaPlayer {
       Stack* ss,
       NodeType node_type,
       ThreadState& thread_state,
+      Board& board,
       int ply,
       int depth,
       int alpha,
@@ -174,6 +175,7 @@ class AlphaBetaPlayer {
       Stack* ss,
       NodeType node_type,
       ThreadState& thread_state,
+      Board& board,
       int depth, // called initially with depth = 0, further decreases
       int alpha,
       int beta,
@@ -219,14 +221,14 @@ class AlphaBetaPlayer {
       std::optional<std::chrono::time_point<std::chrono::system_clock>> deadline,
       int max_depth = 20);
 
-  void ResetMobilityScores(ThreadState& thread_state);
+  void ResetMobilityScores(ThreadState& thread_state, Board& board);
   void ResetHistoryHeuristics();
   void AgeHistoryHeuristics();
   void UpdateStats(Stack* ss, ThreadState& thread_state, const Board& board,
                    const Move& move, int depth, bool fail_high,
                    const std::vector<Move>& searched_moves);
   void UpdateQuietStats(Stack* ss, const Move& move);
-  void UpdateMobilityEvaluation(ThreadState& thread_state, Player turn);
+  void UpdateMobilityEvaluation(ThreadState& thread_state, Board& board, Player turn);
   void UpdateContinuationHistories(Stack* ss, const Move& move, PieceType piece_type, int bonus);
   bool HasShield(Board& board, PlayerColor color, const BoardLocation& king_loc);
   bool OnBackRank(const BoardLocation& king_loc);

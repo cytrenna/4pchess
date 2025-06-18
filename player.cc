@@ -419,6 +419,11 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
     }
 
     Move& move = *move_ptr;
+
+    if (ss->excludedMove.Present() && move == ss->excludedMove) {
+      continue;
+    }
+
     const auto& from = move.From();
     const auto& to = move.To();
     Piece piece = board.GetPiece(move.From());
@@ -552,6 +557,43 @@ std::optional<std::tuple<int, std::optional<Move>>> AlphaBetaPlayer::Search(
     }
 
     int e = 0;  // extension
+
+    // Singular extension search
+    if (options_.enable_singular_extensions
+        && !is_root_node
+        && tt_move.has_value() && move == *tt_move
+        && !ss->excludedMove.Present()
+        && depth >= 9 // Only for reasonably deep searches
+        && tte != nullptr && tte->score != value_none_tt && std::abs(tte->score) < kMateValue
+        && tte->bound == LOWER_BOUND // The TT move was a fail-high
+        && tte->depth >= depth - 3
+        )
+    {
+      num_singular_extension_searches_.fetch_add(1, std::memory_order_relaxed);
+      
+      // Search again, but excluding the strong TT move.
+      // The beta for this search is based on the TT score, with a margin.
+      int singular_beta = tte->score - (58 + 76 * (ss->tt_pv && node_type == NonPV)) * depth / 57;
+      int singular_depth = (depth - 1) / 2;
+
+      ss->excludedMove = move; // Exclude the current move for the sub-search
+
+      PVInfo singular_pvinfo;
+      auto singular_res = Search(ss, NonPV, thread_state, board, ply, singular_depth,
+                                 singular_beta - 1, singular_beta,
+                                 maximizing_player, expanded, deadline, singular_pvinfo, null_moves, is_cut_node);
+      
+      ss->excludedMove = Move(); // Reset for the main search
+
+      if (singular_res.has_value()) {
+        int singular_score = std::get<0>(*singular_res);
+        // If the search without the TT move fails low, the move is singular.
+        if (singular_score < singular_beta) {
+          num_singular_extensions_.fetch_add(1, std::memory_order_relaxed);
+          e = 1; // Grant a 1-ply extension
+        }
+      }
+    }
 
     // check extensions at early moves.
     if (options_.enable_check_extensions

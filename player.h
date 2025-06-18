@@ -73,6 +73,7 @@ struct PlayerOptions {
   bool enable_late_move_reduction = true;
   bool enable_late_move_pruning =   true;
   bool enable_null_move_pruning =   true;
+  bool enable_singular_extensions = true;
 
   // for multithreading
   bool enable_multithreading = true;
@@ -85,6 +86,7 @@ struct PlayerOptions {
 
 struct Stack {
   Move killers[2];
+  Move excludedMove;
   bool tt_pv = false;
   int move_count = 0;
   // indexed by (piece_type, row, col)

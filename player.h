@@ -45,6 +45,7 @@ struct PlayerOptions {
   bool pvs = true;
   bool enable_transposition_table = true;
   bool enable_check_extensions = true;
+  bool enable_singular_extensions = false;
   bool enable_qsearch = true;
   bool enable_aspiration_window = true;
   bool enable_probcut = true;
@@ -73,7 +74,6 @@ struct PlayerOptions {
   bool enable_late_move_reduction = true;
   bool enable_late_move_pruning =   true;
   bool enable_null_move_pruning =   true;
-  bool enable_singular_extensions = true;
 
   // for multithreading
   bool enable_multithreading = true;
